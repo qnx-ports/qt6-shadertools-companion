@@ -1,0 +1,76 @@
+# Alpine-Maintainer: Bart Ribbers <bribbers@disroot.org>
+# Maintainer: Felix Xing <fxing@qnx.com>
+pkgname=qt6-shadertools
+pkgver=6.10.0
+pkgrel=0
+pkgdesc="Experimental module providing APIs and a host tool to host tool to perform graphics and compute shader conditioning"
+url="https://qt.io/"
+arch="all"
+license="LGPL-2.1-only AND LGPL-3.0-only AND GPL-3.0-only AND Qt-GPL-exception-1.0"
+depends="libc++
+        qnx-egl
+        qnx-gles
+        qnx-io-sock
+        qt6-base
+        "
+depends_dev="vulkan-headers 
+            qt6-base-dev
+            "
+makedepends="$depends_dev
+    cmake
+    perl
+    qt6-base-private-dev
+    ninja
+    "
+subpackages="$pkgname-dev"
+options="!check" # No tests
+builddir="$srcdir/qtshadertools-everywhere-src-${pkgver/_/-}"
+
+source="https://download.qt.io/official_releases/qt/${pkgver%.*}/${pkgver/_/-}/submodules/qtshadertools-everywhere-src-${pkgver/_/-}.tar.xz
+    "
+
+build() {
+    # It's qcc here, but compiled with clang on the selfhosted system
+    if [[ $CARCH == "x86_64" ]]; then
+        _triplet="qnx-x86-64-qcc"
+    elif [[ $CARCH == "aarch64" ]]; then
+        _triplet="qnx-aarch64le-qcc"
+    else
+        die "$CARCH not supported"
+    fi
+
+    # Clang does not support fortify source on QNX
+    _extra_flags="-U_FORTIFY_SOURCE"
+    _warn="-Wno-character-conversion"
+
+    export CC=clang
+    export CXX=clang++
+    export CFLAGS="$_extra_flags $_warn"
+    export CXXFLAGS="$_extra_flags $_warn"
+    export LDFLAGS="-lsocket"
+    export LD_LIBRARY_PATH="$builddir/build/lib:$LD_LIBRARY_PATH"
+
+    cmake -B build -G Ninja \
+        -DCMAKE_SKIP_RPATH=ON \
+        -DQT_QMAKE_TARGET_MKSPEC=$_triplet \
+        -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=OFF \
+        -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+        -DCMAKE_INSTALL_PREFIX=/usr \
+        -DFEATURE_pkg_config=ON
+
+    cmake --build build
+}
+
+package() {
+    DESTDIR="$pkgdir" cmake --install build
+}
+
+dev() {
+    default_dev
+
+    amove usr/lib/qt6/sbom
+}
+
+sha512sums="
+3c1490e488f5f5608fecb2d4f0ba1255356b2d4d2aa1d5324469cac2bdea7e4f69794caeca170e663c75f0ae5c774abdda2857801cd5e561696a887efbdc84ac  qtshadertools-everywhere-src-6.10.0.tar.xz
+"
